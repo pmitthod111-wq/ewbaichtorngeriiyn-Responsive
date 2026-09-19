@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "เว็บไซต์โรงเรียน"
+description = "เว็บไซต์โรงเรียนแบบ responsive สำหรับนักเรียน ผู้ปกครอง และชุมชน แสดงข่าวสาร หลักสูตร กิจกรรม และช่องทางติดต่อ พร้อมใช้งานบน Android, iPhone และคอมพิวเตอร์"
+version = "1.0.0"
+id = "artifacts/school-website"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 21294
+
+[services.development]
+run = "pnpm --filter @workspace/school-website run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/school-website", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/school-website/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "21294"
+BASE_PATH = "/"
