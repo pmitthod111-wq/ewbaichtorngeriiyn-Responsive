@@ -10,6 +10,10 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: inquiries
+    description: Public school inquiries and the administrator inbox
+  - name: announcements
+    description: School news and announcements
 paths:
   /healthz:
     get:
@@ -24,6 +28,198 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /inquiries:
+    post:
+      operationId: createInquiry
+      tags: [inquiries]
+      summary: Submit an inquiry to the school
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InquiryInput"
+      responses:
+        "201":
+          description: Inquiry received
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Inquiry"
+        "400":
+          description: Invalid inquiry
+  /announcements:
+    get:
+      operationId: listPublicAnnouncements
+      tags: [announcements]
+      summary: List published announcements for the public website
+      responses:
+        "200":
+          description: Published announcements
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Announcement"
+  /admin/summary:
+    get:
+      operationId: getAdminSummary
+      tags: [inquiries]
+      summary: Get administrator inbox counts and recent inquiries
+      responses:
+        "200":
+          description: Administrator overview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminSummary"
+        "401":
+          description: Sign in required
+        "403":
+          description: Administrator access required
+  /admin/inquiries:
+    get:
+      operationId: listAdminInquiries
+      tags: [inquiries]
+      summary: List inquiries for the administrator inbox
+      responses:
+        "200":
+          description: Inquiries, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Inquiry"
+        "401":
+          description: Sign in required
+        "403":
+          description: Administrator access required
+  /admin/inquiries/{id}:
+    patch:
+      operationId: updateInquiryStatus
+      tags: [inquiries]
+      summary: Change the status of an inquiry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InquiryStatusUpdate"
+      responses:
+        "200":
+          description: Updated inquiry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Inquiry"
+        "400":
+          description: Invalid inquiry status
+        "401":
+          description: Sign in required
+        "403":
+          description: Administrator access required
+        "404":
+          description: Inquiry not found
+  /admin/announcements:
+    get:
+      operationId: listAdminAnnouncements
+      tags: [announcements]
+      summary: List all announcements for the administrator
+      responses:
+        "200":
+          description: All announcements, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Announcement"
+        "401":
+          description: Sign in required
+        "403":
+          description: Administrator access required
+    post:
+      operationId: createAnnouncement
+      tags: [announcements]
+      summary: Create an announcement
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnnouncementInput"
+      responses:
+        "201":
+          description: Created announcement
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Announcement"
+        "400":
+          description: Invalid announcement
+        "401":
+          description: Sign in required
+        "403":
+          description: Administrator access required
+  /admin/announcements/{id}:
+    patch:
+      operationId: updateAnnouncement
+      tags: [announcements]
+      summary: Edit an announcement
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnnouncementInput"
+      responses:
+        "200":
+          description: Updated announcement
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Announcement"
+        "400":
+          description: Invalid announcement
+        "401":
+          description: Sign in required
+        "403":
+          description: Administrator access required
+        "404":
+          description: Announcement not found
+    delete:
+      operationId: deleteAnnouncement
+      tags: [announcements]
+      summary: Delete an announcement
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Announcement deleted
+        "401":
+          description: Sign in required
+        "403":
+          description: Administrator access required
+        "404":
+          description: Announcement not found
 components:
   schemas:
     HealthStatus:
@@ -33,4 +229,106 @@ components:
           type: string
       required:
         - status
+    Inquiry:
+      type: object
+      properties:
+        id:
+          type: integer
+        fullName:
+          type: string
+        contact:
+          type: string
+        topic:
+          type: string
+          enum: [visit, admission, 3d, general]
+        message:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [new, in_progress, resolved]
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, fullName, contact, topic, message, status, createdAt]
+    InquiryInput:
+      type: object
+      properties:
+        fullName:
+          type: string
+          minLength: 2
+          maxLength: 120
+        contact:
+          type: string
+          minLength: 3
+          maxLength: 180
+        topic:
+          type: string
+          enum: [visit, admission, 3d, general]
+        message:
+          type: string
+          maxLength: 2000
+      required: [fullName, contact, topic]
+    InquiryStatusUpdate:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [new, in_progress, resolved]
+      required: [status]
+    Announcement:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        summary:
+          type: string
+        category:
+          type: string
+        published:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, title, summary, category, published, createdAt]
+    AnnouncementInput:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 2
+          maxLength: 180
+        summary:
+          type: string
+          minLength: 2
+          maxLength: 2000
+        category:
+          type: string
+          minLength: 2
+          maxLength: 80
+        published:
+          type: boolean
+      required: [title, summary, category, published]
+    AdminSummary:
+      type: object
+      properties:
+        totalInquiries:
+          type: integer
+        newInquiries:
+          type: integer
+        inProgressInquiries:
+          type: integer
+        resolvedInquiries:
+          type: integer
+        recentInquiries:
+          type: array
+          items:
+            $ref: "#/components/schemas/Inquiry"
+      required:
+        - totalInquiries
+        - newInquiries
+        - inProgressInquiries
+        - resolvedInquiries
+        - recentInquiries
 
