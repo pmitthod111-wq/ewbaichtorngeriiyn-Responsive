@@ -86,6 +86,11 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .login-button:hover { background: #df6f0a; transform: translateY(-1px); }
 .mobile-menu-button { display: none; width: 42px; height: 42px; place-items: center; border: 1px solid #d9e5da; border-radius: 50%; background: #f8fbf7; color: #19753d; }
 .mobile-panel { display: none; }
+.mobile-app-nav { display: none; }
+.install-app-control { padding-top: 8px; }
+.install-app-button { display: flex; width: 100%; min-height: 43px; align-items: center; justify-content: space-between; gap: 9px; padding: 0 9px; border: 1px solid #e5eee1; border-radius: 11px; background: #f5faf2; color: #24783f; font-size: 11px; font-weight: 800; }
+.install-app-button:disabled { color: #78877c; cursor: default; }
+.install-app-instructions { margin: 7px 2px 0; padding: 9px 10px; border-radius: 9px; background: #f6f8f1; color: #647568; font-size: 9px; line-height: 1.8; }
 .focus-ring:focus-visible { outline: 3px solid #f59a35; outline-offset: 3px; }
 
 .hero-section { position: relative; min-height: 468px; background: linear-gradient(110deg, #f5fbf3 0%, #f5fbf3 39%, #ecf6e9 68%, #e5f1e4 100%); }
@@ -250,6 +255,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
   .campus-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 700px) {
+  .site-shell { padding-bottom: calc(87px + env(safe-area-inset-bottom, 0px)); }
   .container { width: min(100% - 28px, 1240px); }
   .page-header { min-height: 68px; }
   .desktop-nav, .page-header > .login-button { display: none; }
@@ -299,6 +305,11 @@ button, a { -webkit-tap-highlight-color: transparent; }
   .footer-bottom { display: block; line-height: 1.8; }
   .footer-bottom span { display: block; }
   .search-modal, .login-modal, .interest-modal { max-height: calc(100dvh - 30px); overflow-y: auto; }
+  .mobile-app-nav { position: fixed; z-index: 36; right: 12px; bottom: calc(8px + env(safe-area-inset-bottom, 0px)); left: 12px; display: grid; width: min(440px, calc(100% - 24px)); min-height: 66px; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-inline: auto; padding: 6px; border: 1px solid rgba(224, 234, 221, .92); border-radius: 22px; background: rgba(255, 255, 252, .94); box-shadow: 0 8px 28px rgba(30, 73, 39, .15); backdrop-filter: blur(18px); }
+  .mobile-app-nav button { display: flex; min-width: 0; min-height: 52px; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 3px 2px; border: 0; border-radius: 15px; background: transparent; color: #7c8b7e; font-size: 9px; font-weight: 700; }
+  .mobile-app-nav button.active { color: #1d773b; }
+  .mobile-tab-icon { display: grid; width: 29px; height: 26px; place-items: center; border-radius: 999px; }
+  .mobile-app-nav button.active .mobile-tab-icon { background: #e9f4e7; }
 }
 @media (max-width: 380px) {
   .brand-words strong { font-size: 13px; }
@@ -719,4 +730,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
   .announcement-stats span { gap: 3px; font-size: 7px; }
   .announcement-tabs button { padding-inline: 5px; font-size: 8px; }
   .form-two-col { grid-template-columns: 1fr; gap: 0; }
+}
+@media (display-mode: standalone) {
+  .site-header { padding-top: env(safe-area-inset-top, 0px); }
 }

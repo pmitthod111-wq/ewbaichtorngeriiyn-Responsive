@@ -23,6 +23,7 @@ import {
   CircleHelp,
   Clock3,
   DoorOpen,
+  Download,
   FileText,
   Filter,
   Inbox,
@@ -159,9 +160,85 @@ function Logo({ compact = false }: { compact?: boolean }) {
   );
 }
 
+type DeferredPwaInstallPrompt = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
+};
+
+function InstallAppControl() {
+  const [promptEvent, setPromptEvent] = useState<DeferredPwaInstallPrompt | null>(null);
+  const [installed, setInstalled] = useState(false);
+  const [showInstructions, setShowInstructions] = useState(false);
+
+  useEffect(() => {
+    const standalone = window.matchMedia('(display-mode: standalone)').matches
+      || (navigator as Navigator & { standalone?: boolean }).standalone === true;
+    setInstalled(standalone);
+
+    const capturePrompt = (event: Event) => {
+      event.preventDefault();
+      setPromptEvent(event as DeferredPwaInstallPrompt);
+    };
+    const markInstalled = () => {
+      setInstalled(true);
+      setPromptEvent(null);
+      setShowInstructions(false);
+    };
+
+    window.addEventListener('beforeinstallprompt', capturePrompt);
+    window.addEventListener('appinstalled', markInstalled);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', capturePrompt);
+      window.removeEventListener('appinstalled', markInstalled);
+    };
+  }, []);
+
+  const install = async () => {
+    if (!promptEvent) {
+      setShowInstructions((current) => !current);
+      return;
+    }
+
+    try {
+      await promptEvent.prompt();
+      const choice = await promptEvent.userChoice;
+      if (choice.outcome === 'accepted') setInstalled(true);
+    } catch (error) {
+      console.error('The app installation prompt could not be opened.', error);
+      setShowInstructions(true);
+    } finally {
+      setPromptEvent(null);
+    }
+  };
+
+  return (
+    <div className="install-app-control">
+      <button
+        type="button"
+        className="install-app-button"
+        data-testid="button-install-app"
+        disabled={installed}
+        aria-expanded={showInstructions}
+        aria-controls="install-app-instructions"
+        onClick={() => { void install(); }}
+      >
+        <Download size={16} />
+        {installed ? 'ติดตั้งแอปแล้ว' : promptEvent ? 'ติดตั้งแอป' : 'เพิ่มแอปไว้บนหน้าจอ'}
+        {!installed && <ArrowRight size={15} />}
+      </button>
+      {showInstructions && !installed && (
+        <p id="install-app-instructions" className="install-app-instructions" role="status">
+          Android: เปิดเมนู ⋮ แล้วเลือก “ติดตั้งแอป” · iPhone: แตะ “แชร์” แล้วเลือก “เพิ่มไปยังหน้าจอโฮม”
+        </p>
+      )}
+    </div>
+  );
+}
+
 function PublicHome() {
   const [interestOpen, setInterestOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [activeAppTab, setActiveAppTab] = useState<'home' | 'explore' | 'news' | 'contact'>('home');
   const [activeAnnouncement, setActiveAnnouncement] = useState<number | null>(null);
   const [form, setForm] = useState<InquiryInput>({ fullName: '', contact: '', topic: 'visit', message: '' });
   const announcements = useListPublicAnnouncements({ query: { queryKey: getListPublicAnnouncementsQueryKey() } });
@@ -170,6 +247,27 @@ function PublicHome() {
   const [searchOpen, setSearchOpen] = useState(false);
 
   useEffect(() => { document.title = 'โรงเรียนของเรา | ระบบแนะนำและสำรวจโรงเรียน'; }, []);
+  useEffect(() => {
+    const tabBySection: Record<string, 'home' | 'explore' | 'news' | 'contact'> = {
+      home: 'home',
+      'explore-detail': 'explore',
+      news: 'news',
+      contact: 'contact',
+    };
+    const observer = new IntersectionObserver((entries) => {
+      const visible = entries
+        .filter((entry) => entry.isIntersecting)
+        .sort((left, right) => right.intersectionRatio - left.intersectionRatio)[0];
+      const tab = visible ? tabBySection[visible.target.id] : undefined;
+      if (tab) setActiveAppTab(tab);
+    }, { rootMargin: '-18% 0px -62% 0px', threshold: 0 });
+
+    for (const id of Object.keys(tabBySection)) {
+      const section = document.getElementById(id);
+      if (section) observer.observe(section);
+    }
+    return () => observer.disconnect();
+  }, []);
   const published = announcements.data ?? [];
   const filtered = published.filter((item) =>
     `${item.title} ${item.category} ${item.summary}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()),
@@ -202,7 +300,7 @@ function PublicHome() {
     <div className="site-shell">
       <header className="site-header">
         <div className="container page-header">
-          <button className="brand-button focus-ring" data-testid="button-brand" onClick={() => scrollTo('top')} aria-label="กลับสู่หน้าแรก"><Logo /></button>
+          <button className="brand-button focus-ring" data-testid="button-brand" onClick={() => { setActiveAppTab('home'); scrollTo('top'); }} aria-label="กลับสู่หน้าแรก"><Logo /></button>
           <nav className="desktop-nav" aria-label="เมนูหลัก">
             <button className="nav-link active" data-testid="link-home" onClick={() => scrollTo('top')}>หน้าหลัก</button>
             <button className="nav-link" data-testid="link-buildings" onClick={() => scrollTo('explore-detail')}>อาคารเรียน</button>
@@ -214,16 +312,17 @@ function PublicHome() {
           <button className="mobile-menu-button focus-ring" data-testid="button-mobile-menu" onClick={() => setMenuOpen(!menuOpen)} aria-label={menuOpen ? 'ปิดเมนู' : 'เปิดเมนู'} aria-expanded={menuOpen}>{menuOpen ? <X size={21} /> : <Menu size={21} />}</button>
         </div>
         {menuOpen && <div className="mobile-panel">
-          <button data-testid="mobile-link-home" onClick={() => scrollTo('top')}>หน้าหลัก <ArrowRight size={16} /></button>
+          <button data-testid="mobile-link-home" onClick={() => { setActiveAppTab('home'); scrollTo('top'); }}>หน้าหลัก <ArrowRight size={16} /></button>
           <button data-testid="mobile-link-buildings" onClick={() => scrollTo('explore-detail')}>อาคารเรียน <ArrowRight size={16} /></button>
           <button data-testid="mobile-link-places" onClick={() => scrollTo('campus-map')}>สถานที่ <ArrowRight size={16} /></button>
           <button data-testid="mobile-link-plans" onClick={() => scrollTo('campus-map')}>แผนผังโรงเรียน <ArrowRight size={16} /></button>
           <Link href="/admin" className="mobile-admin-link" data-testid="mobile-link-admin" onClick={() => setMenuOpen(false)}>สำหรับผู้ดูแล <Inbox size={16} /></Link>
+          <InstallAppControl />
         </div>}
       </header>
 
       <main id="top">
-        <section className="hero-section">
+        <section id="home" className="hero-section">
           <div className="hero-color-wash" aria-hidden="true" />
           <div className="container hero-grid">
             <div className="hero-copy">
@@ -262,7 +361,7 @@ function PublicHome() {
         <section id="campus-map" className="campus-section section-anchor">
           <div className="container campus-grid">
             <div className="map-card"><div className="map-card-copy"><span className="mini-label">EXPLORE IN 3D</span><h2>สำรวจโรงเรียน<br /><em>ในรูปแบบ 3D</em></h2><p>ชมพื้นที่ภายในโรงเรียนแบบเสมือนจริง พร้อมดูรายละเอียดอาคารและสถานที่ต่าง ๆ ได้ทุกที่ทุกเวลา</p><button data-testid="button-open-3d" className="small-green-button focus-ring" onClick={() => { setForm((current) => ({ ...current, topic: '3d' })); setInterestOpen(true); }}><Move3d size={16} /> ขอข้อมูล 3D <ArrowRight size={15} /></button></div><div className="map-illustration" aria-label="ภาพจำลองแผนผังโรงเรียน"><img src="/campus-hero.png" alt="" /><div className="map-grid-overlay" /><span className="map-pin pin-one"><MapPin size={20} /></span><span className="map-pin pin-two"><MapPin size={20} /></span><span className="map-3d-badge">3D</span></div></div>
-            <div className="news-card">
+            <div id="news" className="news-card section-anchor">
               <div className="news-card-heading"><div><span className="mini-label">LATEST UPDATE</span><h2>ข่าวสารและประกาศ</h2></div><span className="news-count">{announcements.data?.length ?? 0} รายการ</span></div>
               {announcements.isLoading ? <div className="public-news-state"><span className="skeleton-line" /><span className="skeleton-line short" /><span className="skeleton-line" /></div> : announcements.isError ? <div className="public-news-state"><p>ไม่สามารถโหลดประกาศได้ในขณะนี้</p><button onClick={() => announcements.refetch()} data-testid="button-retry-public-news">ลองอีกครั้ง</button></div> : published.length === 0 ? <div className="public-news-state"><Bell size={21} /><p>ยังไม่มีประกาศล่าสุด</p><small>โปรดกลับมาติดตามข่าวสารจากโรงเรียน</small></div> : <div className="news-list">
                 {published.map((item) => <div className="news-row" data-testid={`row-news-${item.id}`} key={item.id}><button className="news-row-button" data-testid={`button-news-${item.id}`} onClick={() => setActiveAnnouncement(activeAnnouncement === item.id ? null : item.id)} aria-expanded={activeAnnouncement === item.id}><span className="news-bell"><Bell size={16} /></span><span className="news-row-copy"><strong>{item.title}</strong><small>{item.category}</small></span><span className="news-date">{formatThaiDate(item.createdAt)}</span>{activeAnnouncement === item.id ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</button>{activeAnnouncement === item.id && <p className="news-detail" data-testid={`text-news-detail-${item.id}`}>{item.summary}</p>}</div>)}
@@ -270,9 +369,24 @@ function PublicHome() {
             </div>
           </div>
         </section>
-        <section className="interest-section"><div className="container interest-inner"><div><span className="section-label">STAY CONNECTED</span><h2>อยากรู้จักโรงเรียน<br /><em>ของเราให้มากขึ้น?</em></h2><p>ฝากข้อมูลความสนใจไว้ เราจะติดต่อกลับพร้อมข้อมูลที่เหมาะกับคุณ</p></div><button data-testid="button-interest" className="white-button focus-ring" onClick={() => setInterestOpen(true)}>ลงทะเบียนความสนใจ <ArrowRight size={17} /></button></div></section>
+        <section id="contact" className="interest-section section-anchor"><div className="container interest-inner"><div><span className="section-label">STAY CONNECTED</span><h2>อยากรู้จักโรงเรียน<br /><em>ของเราให้มากขึ้น?</em></h2><p>ฝากข้อมูลความสนใจไว้ เราจะติดต่อกลับพร้อมข้อมูลที่เหมาะกับคุณ</p></div><button data-testid="button-interest" className="white-button focus-ring" onClick={() => setInterestOpen(true)}>ลงทะเบียนความสนใจ <ArrowRight size={17} /></button></div></section>
       </main>
       <footer className="site-footer"><div className="container footer-grid"><div className="footer-brand"><Logo /><p>แหล่งรวมข้อมูลโรงเรียน<br />เพื่อการค้นพบที่ง่ายขึ้น</p></div><div className="footer-column"><h3>เมนูหลัก</h3><button data-testid="footer-link-home" onClick={() => scrollTo('top')}>หน้าหลัก</button><button data-testid="footer-link-buildings" onClick={() => scrollTo('explore-detail')}>อาคารเรียน</button><button data-testid="footer-link-places" onClick={() => scrollTo('campus-map')}>สถานที่</button></div><div className="footer-column"><h3>ข้อมูลโรงเรียน</h3><button data-testid="footer-link-about" onClick={() => { setForm((v) => ({ ...v, topic: 'general' })); setInterestOpen(true); }}>เกี่ยวกับโรงเรียน</button><button data-testid="footer-link-contact" onClick={() => { setForm((v) => ({ ...v, topic: 'general' })); setInterestOpen(true); }}>ติดต่อเรา</button><Link href="/admin" data-testid="footer-link-admin">ผู้ดูแลระบบ</Link></div><div className="footer-column footer-contact"><h3>ติดต่อเรา</h3><p><MapPin size={15} /> 123 หมู่ 1 ตำบลทุ่งสุข<br />อำเภอเมือง จังหวัดเชียงใหม่</p><p><MessageCircle size={15} /> 02-123-4567</p><p><Send size={15} /> info@our-school.ac.th</p></div></div><div className="container footer-bottom"><span>© 2024 โรงเรียนของเรา สงวนลิขสิทธิ์</span><span>สร้างพื้นที่เพื่อการค้นพบและการเรียนรู้</span></div></footer>
+
+      <nav className="mobile-app-nav" aria-label="เมนูแอป">
+        <button type="button" className={activeAppTab === 'home' ? 'active' : ''} aria-current={activeAppTab === 'home' ? 'page' : undefined} onClick={() => { setActiveAppTab('home'); scrollTo('top'); }}>
+          <span className="mobile-tab-icon"><Building2 size={18} /></span><span>หน้าหลัก</span>
+        </button>
+        <button type="button" className={activeAppTab === 'explore' ? 'active' : ''} aria-current={activeAppTab === 'explore' ? 'page' : undefined} onClick={() => { setActiveAppTab('explore'); scrollTo('explore-detail'); }}>
+          <span className="mobile-tab-icon"><MapPin size={18} /></span><span>สำรวจ</span>
+        </button>
+        <button type="button" className={activeAppTab === 'news' ? 'active' : ''} aria-current={activeAppTab === 'news' ? 'page' : undefined} onClick={() => { setActiveAppTab('news'); scrollTo('news'); }}>
+          <span className="mobile-tab-icon"><Bell size={18} /></span><span>ข่าวสาร</span>
+        </button>
+        <button type="button" className={activeAppTab === 'contact' ? 'active' : ''} aria-current={activeAppTab === 'contact' ? 'page' : undefined} onClick={() => { setActiveAppTab('contact'); setMenuOpen(false); setForm((current) => ({ ...current, topic: 'general' })); setInterestOpen(true); }}>
+          <span className="mobile-tab-icon"><MessageCircle size={18} /></span><span>ติดต่อ</span>
+        </button>
+      </nav>
 
       {searchOpen && query && <button className="search-dismiss" aria-label="ปิดผลการค้นหา" data-testid="button-dismiss-search" onClick={() => setSearchOpen(false)} />}
       {interestOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeInterest(); }}><div className="interest-modal" role="dialog" aria-modal="true" aria-labelledby="interest-title"><button className="icon-close focus-ring" data-testid="button-close-interest" onClick={closeInterest} aria-label="ปิดแบบฟอร์ม"><X size={19} /></button>{createInquiry.isSuccess ? <div className="success-state" data-testid="state-inquiry-success"><span className="success-check"><Check size={24} /></span><h2 id="interest-title">ได้รับข้อมูลแล้ว</h2><p>ทีมงานโรงเรียนของเราจะติดต่อกลับโดยเร็วที่สุด</p><button className="modal-primary-button" data-testid="button-close-success" onClick={closeInterest}>เรียบร้อย</button></div> : <><span className="login-icon green"><MessageCircle size={25} /></span><h2 id="interest-title">ลงทะเบียนความสนใจ</h2><p>กรอกข้อมูลสั้น ๆ ให้ทีมโรงเรียนติดต่อกลับ</p><form data-testid="form-interest" onSubmit={submitInquiry}><label htmlFor="inquiry-name">ชื่อผู้ติดต่อ<input id="inquiry-name" data-testid="input-interest-name" value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} required minLength={2} maxLength={120} placeholder="ชื่อ - นามสกุล" /></label><label htmlFor="inquiry-contact">อีเมลหรือเบอร์โทรศัพท์<input id="inquiry-contact" data-testid="input-interest-contact" value={form.contact} onChange={(e) => setForm({ ...form, contact: e.target.value })} required minLength={3} maxLength={180} placeholder="สำหรับติดต่อกลับ" /></label><label htmlFor="inquiry-topic">เรื่องที่สนใจ<select id="inquiry-topic" data-testid="select-interest-topic" value={form.topic} onChange={(e) => setForm({ ...form, topic: e.target.value as InquiryTopic })}><option value="visit">นัดเยี่ยมชมโรงเรียน</option><option value="admission">ข้อมูลการสมัครเรียน</option><option value="3d">ชมโรงเรียนรูปแบบ 3D</option><option value="general">สอบถามทั่วไป</option></select></label><label htmlFor="inquiry-message">รายละเอียดเพิ่มเติม <span className="optional-label">ไม่บังคับ</span><textarea id="inquiry-message" data-testid="input-interest-message" value={form.message ?? ''} onChange={(e) => setForm({ ...form, message: e.target.value })} maxLength={2000} placeholder="แจ้งช่วงเวลาที่สะดวก หรือรายละเอียดที่ต้องการทราบ" rows={3} /></label>{createInquiry.isError && <p className="form-error" role="alert" data-testid="text-inquiry-error">ส่งข้อมูลไม่สำเร็จ กรุณาตรวจสอบแล้วลองอีกครั้ง</p>}<button className="modal-primary-button" data-testid="button-submit-interest" type="submit" disabled={createInquiry.isPending}>{createInquiry.isPending ? 'กำลังส่งข้อมูล…' : 'ส่งข้อมูลความสนใจ'} <Send size={16} /></button></form></>}</div></div>}
